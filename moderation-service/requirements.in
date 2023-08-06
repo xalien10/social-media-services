@@ -1,0 +1,14 @@
+# pip-compile --resolver=backtracking requirements.in
+fastapi[all]
+tortoise-orm[asyncpg]
+aerich
+sendgrid
+pyjwt
+passlib[bcrypt]
+pydantic <= 2.0.0
+fastapi-utils
+pytest
+asgi-lifespan
+pytest-asyncio
+redis_om
+scheduler

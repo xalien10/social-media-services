@@ -1,0 +1,17 @@
+[tool.aerich]
+tortoise_orm = "apps.core.databases.TORTOISE_ORM"
+location = "./apps/migrations"
+src_folder = "./."
+
+[tool.pytest.ini_options]
+asyncio_mode="auto"
+python_files = "tests.py test_*.py"
+filterwarnings = [
+	# To ignore a warning: copy begging of the warning message and
+	# escape special characters (like brackets) with '\\', e.g.:
+	#
+	#	"ignore:django.utils.translation.ugettext_lazy\\(\\) is deprecated in favor of",
+	#
+	"ignore:::^(?!apps)",
+	"error:::^apps",
+]
