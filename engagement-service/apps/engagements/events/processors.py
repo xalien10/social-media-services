@@ -7,6 +7,7 @@ from apps.core.processors import AbstractBaseStreamEventProcessor
 from apps.engagements.services import (
     create_user_engagement_profile,
     UserEngagement,
+    calculate_and_update_user_engagement_score,
 )
 
 
@@ -17,7 +18,7 @@ class UserRegisteredEventProcessor(AbstractBaseStreamEventProcessor):
     async def process(self) -> Any:
         for message in self.get_decoded_messages():
             LOGGER.info("Processing user registered event for user [%s].", message.get("id"))
-            await create_user_engagement_profile(message)
+            return await create_user_engagement_profile(message)
 
 
 class PostCreatedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -28,11 +29,12 @@ class PostCreatedEventProcessor(AbstractBaseStreamEventProcessor):
                 profile = await UserEngagement.get(user_id=message.get("created_by"))
             except DoesNotExist:
                 profile = await create_user_engagement_profile({"id": message.get("created_by")})
-
-            total_posts = profile.total_owned_posts + 1
-            await UserEngagement.get(user_id=message.get("created_by")).update(total_owned_posts=total_posts)
-            await profile.refresh_from_db()
-            # TODO: Need to generate notifications for connections
+            if profile:
+                total_posts = profile.total_owned_posts + 1
+                await UserEngagement.get(user_id=message.get("created_by")).update(total_owned_posts=total_posts)
+                await profile.refresh_from_db()
+                await calculate_and_update_user_engagement_score(profile, message)
+        return
 
 
 class PostDeletedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -43,10 +45,14 @@ class PostDeletedEventProcessor(AbstractBaseStreamEventProcessor):
                 profile = await UserEngagement.get(user_id=message.get("created_by"))
             except DoesNotExist:
                 profile = await create_user_engagement_profile({"id": message.get("created_by")})
-            total_posts = profile.total_owned_posts - 1
-            await UserEngagement.get(user_id=message.get("created_by")).update(total_owned_posts=total_posts)
-            await profile.refresh_from_db()
-            # await calculate_and_update_user_engagement_profile(profile)
+            if profile:
+                total_posts = profile.total_owned_posts - 1
+                await UserEngagement.get(user_id=message.get("created_by")).update(
+                    total_owned_posts=max(0, total_posts)
+                )
+                await profile.refresh_from_db()
+                await calculate_and_update_user_engagement_score(profile, message, "DELETE")
+        return
 
 
 class PostUpdatedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -54,6 +60,7 @@ class PostUpdatedEventProcessor(AbstractBaseStreamEventProcessor):
         for message in self.get_decoded_messages():
             LOGGER.info("Processing post updated event for user [%s].", message.get("created_by"))
             print(message)
+        return
 
 
 class ModerationPostDeleteRequestCompletedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -62,6 +69,7 @@ class ModerationPostDeleteRequestCompletedEventProcessor(AbstractBaseStreamEvent
             LOGGER.info("Processing moderation post deleted event for user [%s].", message.get("created_by"))
             print(message)
             # TODO: Need to generate notification for post owner
+        return
 
 
 class PostCommentCreatedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -79,12 +87,14 @@ class PostCommentCreatedEventProcessor(AbstractBaseStreamEventProcessor):
             await profile.refresh_from_db()
             # await calculate_and_update_user_engagement_profile(profile)
             # TODO: Need to generate notification for post owner
+        return
 
 
 class PostCommentUpdatedEventProcessor(AbstractBaseStreamEventProcessor):
     async def process(self) -> Any:
         for message in self.get_decoded_messages():
             print(message)
+        return
 
 
 class ModerationPostCommentDeleteRequestCompletedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -92,6 +102,7 @@ class ModerationPostCommentDeleteRequestCompletedEventProcessor(AbstractBaseStre
         for message in self.get_decoded_messages():
             print(message)
             # TODO: Need to generate notification for post comment owner
+        return
 
 
 class PostViewedRequestedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -102,12 +113,14 @@ class PostViewedRequestedEventProcessor(AbstractBaseStreamEventProcessor):
                 profile = await UserEngagement.get(user_id=message.get("viewed_by"))
             except DoesNotExist:
                 profile = await create_user_engagement_profile({"id": message.get("viewed_by")})
-            total_post_views = profile.total_post_views + 1
-            await UserEngagement.get(user_id=message.get("viewed_by")).update(total_post_views=total_post_views)
-            await profile.refresh_from_db()
-            # await calculate_and_update_user_engagement_profile(profile)
-            print(message)
-            # TODO: Need to generate notification for post owner
+            if profile:
+                total_post_views = profile.total_post_views + 1
+                await UserEngagement.get(user_id=message.get("viewed_by")).update(total_post_views=total_post_views)
+                await profile.refresh_from_db()
+                # await calculate_and_update_user_engagement_profile(profile)
+                print(message)
+                # TODO: Need to generate notification for post owner
+        return
 
 
 class PostReactionCreatedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -125,6 +138,7 @@ class PostReactionCreatedEventProcessor(AbstractBaseStreamEventProcessor):
             await profile.refresh_from_db()
             # await calculate_and_update_user_engagement_profile(profile)
             # TODO: Need to generate notification for post owner
+        return
 
 
 class PostReactionDeletedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -142,6 +156,7 @@ class PostReactionDeletedEventProcessor(AbstractBaseStreamEventProcessor):
             await profile.refresh_from_db()
             # await calculate_and_update_user_engagement_profile(profile)
             # TODO: Need to generate notification for post owner
+        return
 
 
 class PostCommentDeletedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -152,12 +167,14 @@ class PostCommentDeletedEventProcessor(AbstractBaseStreamEventProcessor):
                 profile = await UserEngagement.get(user_id=message.get("created_by"))
             except DoesNotExist:
                 profile = await create_user_engagement_profile({"id": message.get("created_by")})
-            total_post_comments = profile.total_post_comments - 1
-            await UserEngagement.get(user_id=message.get("created_by")).update(
-                total_post_comments=total_post_comments
-            )
-            await profile.refresh_from_db()
-            # await calculate_and_update_user_engagement_profile(profile)
+            if profile:
+                total_post_comments = profile.total_post_comments - 1
+                await UserEngagement.get(user_id=message.get("created_by")).update(
+                    total_post_comments=total_post_comments
+                )
+                await profile.refresh_from_db()
+                # await calculate_and_update_user_engagement_score(profile, message, "DELETE")
+        return
 
 
 class ModerationPostDeletRequestedEventProcessor(AbstractBaseStreamEventProcessor):
@@ -165,3 +182,4 @@ class ModerationPostDeletRequestedEventProcessor(AbstractBaseStreamEventProcesso
         for message in self.get_decoded_messages():
             print(message)
             # TODO: Need to generate notification for post owner
+        return
