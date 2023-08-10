@@ -1,0 +1,36 @@
+version: "3.9"
+
+volumes:
+  data:
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8002
+    volumes:
+      - .:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@interaction_postgres:5433/interaction_db
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+    ports:
+      - 8001:8001
+    
+    depends_on:
+      - postgres
+    restart: always
+
+  postgres:
+    container_name: interaction_postgres
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "interaction_db"
+      PGPORT: 5434
+    ports:
+      - "5434:5434"
+    volumes:
+      - data:/var/lib/postgresql/data
+    restart: unless-stopped

@@ -1,0 +1,191 @@
+version: "3.9"
+
+volumes:
+  redis_data:
+  auth_db_data:
+  post_db_data:
+  interaction_db_data:
+  moderation_db_data:
+  engagement_db_data:
+
+services:
+
+  redis:
+    image: redis:alpine3.17
+    volumes:
+      - "redis_data:/data"
+    ports:
+      - "6379:6379"
+    restart: on-failure
+
+  authpostgres:
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "authdb"
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  
+  auth_backend:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./auth-service:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@authpostgres:5432/authdb
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - 8000:8000
+    depends_on:
+      - redis
+      - authpostgres
+    restart: always
+  
+  postpostgres:
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "postdb"
+      PGPORT: 5433
+    ports:
+      - "5433:5433"
+    volumes:
+      - post_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  
+  post_backend:
+    build:
+      context: ./post-service
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8001
+    volumes:
+      - ./post-service:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@postpostgres:5433/postdb
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+      - AUTHENTICATION_VERIFICATION_URL=http://auth_backend:8000/api/v1/auth/verify-token
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - 8001:8001
+    depends_on:
+      - redis
+      - auth_backend
+      - postpostgres
+    restart: always
+  
+  interactionpostgres:
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "interactiondb"
+      PGPORT: 5434
+    ports:
+      - "5434:5434"
+    volumes:
+      - interaction_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  
+  interaction_backend:
+    build:
+      context: ./interaction-service
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8002
+    volumes:
+      - ./interaction-service:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@interactionpostgres:5434/interactiondb
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+      - AUTHENTICATION_VERIFICATION_URL=http://auth_backend:8000/api/v1/auth/verify-token
+      - REDIS_URL=redis://redis:6379
+      - POST_SERVICE_URL=http://post_backend:8001
+    ports:
+      - 8002:8002
+    depends_on:
+      - redis
+      - auth_backend
+      - post_backend
+      - interactionpostgres
+
+    restart: always
+  
+  moderationpostgres:
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "moderationdb"
+      PGPORT: 5435
+    ports:
+      - "5435:5435"
+    volumes:
+      - moderation_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  
+  moderation_backend:
+    build:
+      context: ./moderation-service
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8003
+    volumes:
+      - ./moderation-service:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@moderationpostgres:5435/moderationdb
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+      - AUTHENTICATION_VERIFICATION_URL=http://auth_backend:8000/api/v1/auth/verify-token
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - 8003:8003
+    depends_on:
+      - redis
+      - auth_backend
+      - post_backend
+      - interaction_backend
+      - moderationpostgres
+
+    restart: always
+
+  engagementpostgres:
+    image: postgres:alpine3.17
+    environment:
+      POSTGRES_USER: "root"
+      POSTGRES_PASSWORD: "admin"
+      POSTGRES_DB: "engagementdb"
+      PGPORT: 5436
+    ports:
+      - "5436:5436"
+    volumes:
+      - engagement_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  engagement_backend:
+    build:
+      context: ./engagement-service
+      dockerfile: Dockerfile
+    command: uvicorn apps.main:app --host 0.0.0.0 --port 8004
+    volumes:
+      - ./engagement-service:/code/
+    environment:
+      - DATABASE_URL=postgres://root:admin@engagementpostgres:5436/engagementdb
+      - SECRET_KEY=8c6bf0f1b38792f53b1eea89cdf30109a1eceba49d2f0258cd50d31ea4562da7
+      - AUTHENTICATION_VERIFICATION_URL=http://auth_backend:8000/api/v1/auth/verify-token
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - 8004:8004
+    depends_on:
+      - redis
+      - auth_backend
+      - post_backend
+      - interaction_backend
+      - moderation_backend
+      - engagementpostgres
+
+    restart: always
